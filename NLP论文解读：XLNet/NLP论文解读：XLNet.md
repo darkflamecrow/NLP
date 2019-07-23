@@ -23,26 +23,27 @@ XLNet综合AE与AR的优点，同时在一定程度上避免了两者的缺点�
 ### 2 方法的提出
 #####  2.1 背景
 AR方法可以直接求最大化对数似然，可以逐步拆解条件概率，公式如下：
-![f1](图片链接地址)
+![f1](https://github.com/darkflamecrow/NLP/blob/master/NLP%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%EF%BC%9AXLNet/f1.png?raw=true)
 AE方法通过随机将一定比例（常为15%）的token换成【MASK】，求上下文已知情况下，被MASK的词的条件概率，其中必须假设被msak的词之间互不相关，才能将其拆开，公司如下：
-![f2](图片链接地址)
+![f2](https://github.com/darkflamecrow/NLP/blob/master/NLP%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%EF%BC%9AXLNet/f2.png?raw=true)
 作者从独立性假设（Independence Assumption）、输入噪音（Input noise）、文本依赖（Context dependency）三个方面比较了两种方法的优缺点。
 #####  2.2 目标：PLM（Permutation Language Modeling）
-![p1](图片链接地址)
+![p1](https://upload-images.jianshu.io/upload_images/18662974-bc9a1b9bbcded6e7.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+
 简单来说，就是一种广义的AR方法（避免了AE的不合理的独立性假设），通过重新排序的方法，使得预训练得到双向的文本信息。但为了使输入与其后的fine-tunning阶段相同，重新排序的过程在transformer层内部实现，具体结构在2.3节有详细说明。
 举个例子，比如输入为（x1，x2，x3，x4），重新排序有4！种情况。按照传统AR的方法的方法从左到右预测的话，只能通过x1，x2预测x3，则损失了x4的信息，如果得到的排序是（x4，x1，x3，x2）的话，则通过x4，x1来预测x3。当然句子长度非常长时，是不可能穷举的，通过抽样的方法来求期望，并最大化以下似然函数：
-![f3](图片链接地址)
+![f3](https://github.com/darkflamecrow/NLP/blob/master/NLP%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%EF%BC%9AXLNet/f3.png?raw=true)
 在具体实现过程中，作者采用了特别的结果以解决使用transformer训练PLM的问题。
 #####  2.3 结构：双流自注意力
 由于PLM任务有特殊的性质，简单的Transformer无法有效工作。由于随机排列求期望的影响，简单应用标准Softmax方程求期望时，$h_{\theta}(x_{z<t})$就不依赖于位置信息（随机打乱求期望，实际上抹杀了位置信息的影响），导致模型无法学习到有用的表征。以下第一个公式为普通transformer应用的公式，第二个公式为作者为了PLM任务设计的公式。
-![f3.5](图片链接地址)
-![f4](图片链接地址)
+![f3.5](https://github.com/darkflamecrow/NLP/blob/master/NLP%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%EF%BC%9AXLNet/f3.5.png?raw=true)
+![f4](https://github.com/darkflamecrow/NLP/blob/master/NLP%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%EF%BC%9AXLNet/f4.png?raw=true)
 仔细考虑Transformer的结构，当它用来解决PLM预训练任务时必须解决以下两个问题：
 - 当预测$x_{z_t}$时只使用位置信息$z_t$和上文信息，不能看到自己本身，即$x_{z_t}$，否则求条件概率$g_{\theta}(x_{z<t},z_t)$的问题将会变成一个平凡的问题。
 - 当预测$x_{z_j}$时，其中j>t，则能看到$x_{z_t}$信息。
 考虑具体的注意力机制，只需在QUERY矩阵上做文章即可，当QUERY矩阵没有对角线时，显然是无法看到自己的。根据这样的思路，作者设计了双流自注意力模型，query流与content流共享参数$\theta$，但query流QUERY矩阵没有对角线。为了实现排序效果，query流必须初始化为可训练的向量即，n行必须分别为0，1，2，......，n-1个点，且符合贝叶斯网络，即相当于实现只看到特定排序的mask矩阵。以下为更新公式与网络示意图：
-![f5](图片链接地址)
-![p2](图片链接地址)
+![f5](https://github.com/darkflamecrow/NLP/blob/master/NLP%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%EF%BC%9AXLNet/f5.png?raw=true)
+![p2](https://github.com/darkflamecrow/NLP/blob/master/NLP%E8%AE%BA%E6%96%87%E8%A7%A3%E8%AF%BB%EF%BC%9AXLNet/p2.png?raw=true)
 **部分预测**当t比较小，仅得到t-1个token的信息，这样的预测比较难，很难收敛，所以模型设计了一个超参数K，只对后1/K的tokens进行预测。
 #####  2.4 2.5 借鉴Transformer-XL
 作者团队半年前发表的Transformer-XL中使用了很多有效的trick，使得Transformer-XL做到了AR模型中的state-of-the-art。本文中也借鉴使用了相对位置编码和片段复发机制分别解决绝对位置编码无法处理的2个以上文本对应输入的task和算法效率问题，详见Transformer-XL文章。
