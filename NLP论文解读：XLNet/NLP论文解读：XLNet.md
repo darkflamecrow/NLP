@@ -63,6 +63,8 @@ AE方法通过随机将一定比例（常为15%）的token换成【MASK】，求
 
 # 论文地址与代码地址
 论文：https://arxiv.org/pdf/1906.08237.pdf
+
 代码：https://github.com/zihangdai/xlnet
+
 公众号：六点一刻研习室
 （兴趣使然进行更新，没有质量保障）
